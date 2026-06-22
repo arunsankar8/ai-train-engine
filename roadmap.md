@@ -106,12 +106,14 @@ You're going **T-shaped**: a broad, deep base in **backend + AI engineering** (t
 
 - [ ] [scikit-learn Getting Started](https://scikit-learn.org/stable/getting_started.html) + StatQuest (decision trees, train/test split, overfitting)
   - *The classical-ML toolkit. Fast to learn, still widely used, expected in interviews.*
-- [ ] Train one model on a tabular dataset (e.g. Titanic on Kaggle)
+- [ ] Train one model on a tabular dataset — [Kaggle Titanic](https://www.kaggle.com/c/titanic) (has a built-in beginner notebook + tutorials)
   - *Your first end-to-end "predict something from a spreadsheet" project.*
 - [ ] Learn metrics: accuracy, precision, recall, F1, confusion matrix, ROC/AUC (StatQuest)
   - *You literally cannot tell if a model is "good" without these. Non-negotiable.*
 - [ ] Pandas: load → clean → EDA → proper train/val/test split
   - *The unglamorous skill that separates working ML from broken ML.*
+- [ ] *(Small project)* Implement linear & logistic regression from scratch (no sklearn), add L1/L2 regularization
+  - *No new resource needed — reuse your Unit 2 NumPy skills + Andrew Ng's math from Unit 1. Logistic regression is literally a 1-layer neural net.*
 - **Done when:** messy CSV → clean dataset → trained model → honest evaluation
 
 ### Unit 5 — fast.ai *(OPTIONAL — skim or skip)*
@@ -154,8 +156,12 @@ You're going **T-shaped**: a broad, deep base in **backend + AI engineering** (t
 
 - [ ] Learn to read loss curves, use holdout sets, systematically eyeball outputs
   - *The minimum discipline to know if your training worked or you fooled yourself.*
+- [ ] Read the [Hugging Face Evaluation Guidebook](https://github.com/huggingface/evaluation-guidebook)
+  - *The best free, practical resource on evaluating LLMs — your concrete anchor for this unit.*
 - [ ] Browse [DeepLearning.AI short courses](https://www.deeplearning.ai/short-courses/) on evaluating LLMs
   - *Bite-sized, practical, made with the actual tool vendors.*
+- [ ] Know the standard benchmarks (MMLU, HumanEval, MT-Bench, AlpacaEval) + the "LLM-as-judge" technique (concept level)
+  - *"How do you know it's good?" comes up in real work AND interviews. Awareness only — no need to run them all now.*
 
 ---
 
@@ -171,6 +177,12 @@ You're going **T-shaped**: a broad, deep base in **backend + AI engineering** (t
 - [ ] [OpenAI prompting guide](https://platform.openai.com/docs/guides/prompt-engineering)
 - [ ] [Anthropic prompting guide](https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/overview)
   - *Chain-of-thought, few-shot, structured output — these dramatically improve model results.*
+- [ ] Decoding strategies: greedy, beam, temperature, top-k, top-p (nucleus), repetition/frequency penalties — [HF "How to generate text"](https://huggingface.co/blog/how-to-generate)
+  - *Daily-use knowledge for any LLM tool — this is how you control what the model generates. ~half a day, huge payoff.*
+- [ ] Chat templates & multi-turn formatting (ChatML/Alpaca, system prompts, special tokens, loss masking) — [HF chat templating docs](https://huggingface.co/docs/transformers/main/en/chat_templating)
+  - *Needed to build chat tools AND to format fine-tuning data correctly (feeds Unit 10).*
+- [ ] *(Optional small project)* Build a tiny BPE tokenizer from scratch — [Karpathy: "Let's build the GPT Tokenizer"](https://www.youtube.com/watch?v=zduSFxRajkE)
+  - *Karpathy's dedicated tokenizer video is the perfect guide. Small and illuminating — demystifies how text becomes tokens. Skip if short on time.*
 - [ ] Build: simple chatbot / Q&A tool with a HF model
   - *Your first applied LLM project — and a portfolio piece.*
 
@@ -200,6 +212,8 @@ You're going **T-shaped**: a broad, deep base in **backend + AI engineering** (t
 ### Unit 12 — RAG (build from scratch first)
 **What you're doing & why:** Building Retrieval-Augmented Generation — how you give a model access to *your* documents/knowledge. You build it from scratch first so you're never dependent on a framework you don't understand. RAG is the backbone of most real-world AI products.
 
+- [ ] Understand embeddings (text → semantic vectors) — [Sentence Transformers docs](https://www.sbert.net/) (the HF course covers this too)
+  - *The concept RAG is built on: similar meaning = nearby vectors. Don't enter RAG without this clicking.*
 - [ ] Build RAG with NO framework (embeddings + vector search + LLM call)
   - *Understand the machinery before reaching for abstractions.*
 - [ ] Set up [ChromaDB](https://www.trychroma.com) locally
@@ -265,6 +279,8 @@ You're going **T-shaped**: a broad, deep base in **backend + AI engineering** (t
   - *Industry-standard tracking — every serious ML project uses something like it.*
 - [ ] Model serving with FastAPI + Docker; skim [vLLM](https://github.com/vllm-project/vllm)
   - *How models get served at scale. Know vLLM exists; don't sink days unless a project needs it.*
+- [ ] KV cache — understand the *concept* (what it caches, why it speeds inference, why it costs memory)
+  - *Concept only — don't implement PagedAttention. Directly relevant to your on-device spike: KV cache memory is a real constraint on a phone.*
 - [ ] *(Reference, read gradually)* Chip Huyen — *Designing Machine Learning Systems* (book)
   - *The industry-standard book on real ML systems — what senior AI engineers are expected to know.*
 
@@ -303,6 +319,8 @@ You're going **T-shaped**: a broad, deep base in **backend + AI engineering** (t
   - *"AI engineer who ships models to phones, offline" — a scarce, memorable pitch.*
 - [ ] Ongoing: engage community (HF forums, local AI meetups, AI X/Twitter)
   - *Most switch roles come through network, not cold applications.*
+- [ ] ~Month 10-11: interview prep — practice explaining core concepts out loud (attention, backprop, fine-tuning) + skim ML system design framing
+  - *You're switching careers — clearly explaining what you built is half the battle. A couple of weeks near job-hunt time; don't over-invest.*
 
 ---
 
@@ -316,6 +334,30 @@ You're going **T-shaped**: a broad, deep base in **backend + AI engineering** (t
 - [ ] [Llama 2](https://arxiv.org/abs/2307.09288) — *architecture decisions in a real production model*
 - [ ] [InstructGPT](https://arxiv.org/abs/2203.02155) — *how RLHF made GPT actually useful*
 - [ ] Ongoing: 1 paper / 2 weeks via [arxiv-sanity-lite](https://arxiv-sanity-lite.com) — *build paper-reading fluency, stay current*
+
+---
+
+## 📚 Reference Shelf (zero-overhead — lookup material, not tasks)
+
+Use these when a concept won't click or you want a second explanation. Don't "study" them cover to cover.
+
+- [Lil'Log (Lilian Weng)](https://lilianweng.github.io/) — the best concise technical summaries anywhere; your go-to when stuck
+- [nanoGPT (Karpathy)](https://github.com/karpathy/nanoGPT) — clean minimal GPT; pairs perfectly with Unit 7
+- [d2l.ai — Dive into Deep Learning](https://d2l.ai/) — free interactive book; great for a different explanation of a topic
+- [The Illustrated Transformer](https://jalammar.github.io/illustrated-transformer/) — (also in Unit 7) the clearest visual on attention
+- *(Optional deep dive, only later)* Stanford CS224n (NLP) — a full course; reference depth, not a requirement
+
+---
+
+## On doing EXTRA projects (read before you go hunting for more)
+
+Your roadmap already embeds the projects that matter — neural net from scratch (Unit 2), a GPT (Unit 7), a fine-tune (Unit 10), RAG + an agent (Units 12-13), on-device inference (Unit 16), and two capstones. **You are not missing important projects.**
+
+- **Don't** redo parallel versions of these just because another curriculum lists them — that's duplication, not progress.
+- **Do** the small reinforcing ones folded in above (regression from scratch in Unit 4, optional BPE tokenizer in Unit 9) — cheap, locks in fundamentals.
+- **Save for AFTER the 12 months** (and only if you go deeper toward research): training a model from scratch beyond Karpathy, training a 1B model, MoE, distributed training, RLHF/PPO from scratch, multimodal, Mamba. Research-track, need expensive multi-GPU hardware, not used by AI product/on-device engineers.
+
+**Rule of thumb:** a project is worth doing if it (a) reinforces a fundamental cheaply, or (b) becomes a portfolio piece that proves you're an AI engineer with an on-device edge. If it does neither, skip it.
 
 ---
 
