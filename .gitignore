@@ -1,0 +1,44 @@
+# Python / virtual envs
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.python-version
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ML artifacts (keep the repo light — don't commit big binaries)
+*.ckpt
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.gguf
+*.onnx
+*.tflite
+*.mlmodel
+wandb/
+runs/
+checkpoints/
+outputs/
+
+# Data (don't commit datasets)
+data/
+datasets/
+*.csv
+*.parquet
+
+# Secrets — NEVER commit API keys
+.env
+.env.*
+*.key
+secrets.*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
