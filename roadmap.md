@@ -4,7 +4,7 @@
 **Goal:** Career switch to full-stack AI engineer with a rare on-device / mobile-AI specialty
 **Target role:** AI/ML Application Engineer — building, fine-tuning, and shipping AI systems
 **Pace:** 2 hrs/day × 6 days/week (~12 hrs/week) → **~12 months**
-**Started:** _(fill in)_   |   **Target finish:** _(fill in)_
+**Started:** _(23 June 2026)_   |   **Target finish:** _(fill in)_
 
 ---
 
