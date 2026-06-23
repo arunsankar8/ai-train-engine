@@ -5,6 +5,11 @@ export type OutputLine = {
   text: string;
 };
 
+export type PyFile = {
+  name: string;
+  content: string;
+};
+
 export function usePython() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [isReady, setIsReady] = useState(false);
@@ -25,21 +30,27 @@ export function usePython() {
           indexURL: "https://cdn.jsdelivr.net/pyodide/v0.27.5/full/",
         });
 
+        // Set up the workspace directory and add it to sys.path
+        try {
+          pyodide.FS.mkdir("/workspace");
+        } catch {
+          // Directory may already exist
+        }
+
+        await pyodide.runPythonAsync(`
+import sys
+if '/workspace' not in sys.path:
+    sys.path.insert(0, '/workspace')
+`);
+
         if (mounted) {
           setPyodideInstance(pyodide);
           setIsReady(true);
-          setOutput((prev) => [
-            ...prev,
-            { type: "system", text: "Python initialized and ready." },
-          ]);
+          setOutput([{ type: "system", text: "Python initialized and ready." }]);
         }
       } catch (err) {
         if (mounted) {
-          console.error("Failed to initialize Pyodide:", err);
-          setOutput((prev) => [
-            ...prev,
-            { type: "stderr", text: `Failed to initialize Python: ${err}` },
-          ]);
+          setOutput([{ type: "stderr", text: `Failed to initialize Python: ${err}` }]);
         }
       } finally {
         if (mounted) {
@@ -49,45 +60,45 @@ export function usePython() {
     }
 
     initPyodide();
-
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, []);
 
   const runCode = useCallback(
-    async (code: string) => {
+    async (activeCode: string, files: PyFile[]) => {
       if (!isReady || !pyodideInstance) {
-        setOutput((prev) => [
-          ...prev,
-          { type: "stderr", text: "Python is not ready yet." },
-        ]);
+        setOutput((prev) => [...prev, { type: "stderr", text: "Python is not ready yet." }]);
         return;
       }
 
       setIsRunning(true);
-      
-      // Clear previous stdout/stderr setup by wrapping execution in a safe way
-      // We buffer outputs and set them after execution to avoid async issues with React state updates
-      let localOutput: OutputLine[] = [];
-      
+      const localOutput: OutputLine[] = [];
+
       pyodideInstance.setStdout({
-        batched: (text: string) => {
-          localOutput.push({ type: "stdout", text });
-        },
+        batched: (text: string) => { localOutput.push({ type: "stdout", text }); },
       });
-      
       pyodideInstance.setStderr({
-        batched: (text: string) => {
-          localOutput.push({ type: "stderr", text });
-        },
+        batched: (text: string) => { localOutput.push({ type: "stderr", text }); },
       });
 
       try {
-        await pyodideInstance.runPythonAsync(code);
-        // Sometimes Python script might just return a value without printing
+        // Write all files to the virtual filesystem so they can be imported
+        for (const file of files) {
+          const path = `/workspace/${file.name}`;
+          pyodideInstance.FS.writeFile(path, file.content, { encoding: "utf8" });
+        }
+
+        // Invalidate Python's import caches so re-imports pick up file changes
+        await pyodideInstance.runPythonAsync(`
+import importlib
+import sys
+# Remove cached modules that correspond to workspace files so re-imports are fresh
+_to_remove = [k for k in sys.modules if not k.startswith('_') and k not in ('sys', 'importlib')]
+for _mod in _to_remove:
+    sys.modules.pop(_mod, None)
+`);
+
+        await pyodideInstance.runPythonAsync(activeCode);
       } catch (err: any) {
-        // Pyodide throws errors as string-like objects
         localOutput.push({ type: "stderr", text: err.toString() });
       } finally {
         setOutput((prev) => [...prev, ...localOutput]);
@@ -101,12 +112,5 @@ export function usePython() {
     setOutput([]);
   }, []);
 
-  return {
-    isInitializing,
-    isReady,
-    isRunning,
-    output,
-    runCode,
-    clearOutput,
-  };
+  return { isInitializing, isReady, isRunning, output, runCode, clearOutput };
 }

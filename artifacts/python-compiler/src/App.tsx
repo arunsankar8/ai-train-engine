@@ -1,13 +1,20 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Editor, useMonaco } from "@monaco-editor/react";
-import { Play, Trash2, TerminalSquare, Settings2, CheckCircle2, Loader2, Code2 } from "lucide-react";
-import { usePython } from "@/hooks/use-python";
+import {
+  Play, Trash2, TerminalSquare, Code2, CheckCircle2,
+  Loader2, Plus, FileCode, X, Pencil, ChevronRight,
+} from "lucide-react";
+import { usePython, PyFile } from "@/hooks/use-python";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 
-const DEFAULT_CODE = `# Welcome to Python Compiler!
+const INITIAL_FILES: PyFile[] = [
+  {
+    name: "main.py",
+    content: `# Welcome to Python Compiler!
 # Press Ctrl+Enter or click Run to execute
+
+from utils import add, multiply
 
 def greet(name):
     return f"Hello, {name}!"
@@ -15,17 +22,54 @@ def greet(name):
 print(greet("World"))
 print("Python is running in your browser via Pyodide!")
 
+# Import from another file
+result = add(7, 3)
+print(f"7 + 3 = {result}")
+
+product = multiply(4, 5)
+print(f"4 × 5 = {product}")
+
 # Try some math
 import math
 print(f"π ≈ {math.pi:.4f}")
-print(f"√2 ≈ {math.sqrt(2):.4f}")
-`;
+`,
+  },
+  {
+    name: "utils.py",
+    content: `# Utility functions — import these in main.py
+# Example: from utils import add, multiply
 
-function IDE() {
-  const [code, setCode] = useState(DEFAULT_CODE);
-  const { isInitializing, isReady, isRunning, output, runCode, clearOutput } = usePython();
+def add(a, b):
+    return a + b
+
+def multiply(a, b):
+    return a * b
+
+def factorial(n):
+    if n <= 1:
+        return 1
+    return n * factorial(n - 1)
+`,
+  },
+];
+
+function generateNewFileName(files: PyFile[]): string {
+  let i = 1;
+  while (files.some((f) => f.name === `file${i}.py`)) i++;
+  return `file${i}.py`;
+}
+
+export default function App() {
+  const [files, setFiles] = useState<PyFile[]>(INITIAL_FILES);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [renamingIndex, setRenamingIndex] = useState<number | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const renameInputRef = useRef<HTMLInputElement>(null);
   const outputEndRef = useRef<HTMLDivElement>(null);
   const monaco = useMonaco();
+
+  const { isInitializing, isReady, isRunning, output, runCode, clearOutput } = usePython();
 
   useEffect(() => {
     if (outputEndRef.current) {
@@ -33,167 +77,323 @@ function IDE() {
     }
   }, [output]);
 
-  const handleRun = () => {
-    if (!isReady || isRunning) return;
-    // Add an execution separator if there's already output
-    if (output.length > 0) {
-      runCode(code);
-    } else {
-      runCode(code);
+  useEffect(() => {
+    if (renamingIndex !== null && renameInputRef.current) {
+      renameInputRef.current.focus();
+      renameInputRef.current.select();
     }
-  };
+  }, [renamingIndex]);
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if ((e.ctrlKey || e.metaKey || e.shiftKey) && e.key === "Enter") {
-      e.preventDefault();
-      handleRun();
-    }
-  };
-
-  // Configure Monaco theme when it loads
+  // Configure Monaco dark theme
   useEffect(() => {
     if (monaco) {
-      monaco.editor.defineTheme('my-dark', {
-        base: 'vs-dark',
+      monaco.editor.defineTheme("my-dark", {
+        base: "vs-dark",
         inherit: true,
         rules: [
-          { token: 'comment', foreground: '6b7280', fontStyle: 'italic' },
-          { token: 'keyword', foreground: '10b981' }, // primary/emerald
-          { token: 'string', foreground: 'fcd34d' },
-          { token: 'number', foreground: '818cf8' },
+          { token: "comment", foreground: "6b7280", fontStyle: "italic" },
+          { token: "keyword", foreground: "10b981" },
+          { token: "string", foreground: "fcd34d" },
+          { token: "number", foreground: "818cf8" },
         ],
         colors: {
-          'editor.background': '#0a0a0a', // foreground matching background
-          'editor.lineHighlightBackground': '#171717',
-          'editorLineNumber.foreground': '#525252',
-          'editorIndentGuide.background': '#262626',
-        }
+          "editor.background": "#0a0a0a",
+          "editor.lineHighlightBackground": "#171717",
+          "editorLineNumber.foreground": "#525252",
+          "editorIndentGuide.background": "#262626",
+        },
       });
-      monaco.editor.setTheme('my-dark');
+      monaco.editor.setTheme("my-dark");
     }
   }, [monaco]);
 
+  const activeFile = files[activeIndex] ?? files[0];
+
+  const handleCodeChange = useCallback(
+    (value: string | undefined) => {
+      setFiles((prev) =>
+        prev.map((f, i) => (i === activeIndex ? { ...f, content: value ?? "" } : f))
+      );
+    },
+    [activeIndex]
+  );
+
+  const handleRun = useCallback(() => {
+    if (!isReady || isRunning) return;
+    runCode(activeFile.content, files);
+  }, [isReady, isRunning, activeFile, files, runCode]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey || e.shiftKey) && e.key === "Enter") {
+        e.preventDefault();
+        handleRun();
+      }
+    },
+    [handleRun]
+  );
+
+  const addFile = () => {
+    const name = generateNewFileName(files);
+    const newFile: PyFile = { name, content: `# ${name}\n` };
+    setFiles((prev) => [...prev, newFile]);
+    setActiveIndex(files.length);
+  };
+
+  const deleteFile = (index: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (files.length === 1) return;
+    const next = files.filter((_, i) => i !== index);
+    setFiles(next);
+    setActiveIndex((prev) => Math.min(prev, next.length - 1));
+  };
+
+  const startRename = (index: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setRenamingIndex(index);
+    setRenameValue(files[index].name);
+  };
+
+  const commitRename = () => {
+    if (renamingIndex === null) return;
+    const trimmed = renameValue.trim();
+    const name = trimmed.endsWith(".py") ? trimmed : trimmed + ".py";
+    if (name && !files.some((f, i) => i !== renamingIndex && f.name === name)) {
+      setFiles((prev) =>
+        prev.map((f, i) => (i === renamingIndex ? { ...f, name } : f))
+      );
+    }
+    setRenamingIndex(null);
+  };
+
   return (
-    <div className="flex flex-col h-screen w-full bg-background text-foreground overflow-hidden font-sans">
+    <div className="flex flex-col h-screen w-full bg-[#0a0a0a] text-zinc-200 overflow-hidden font-sans">
       {/* Header */}
-      <header className="flex-none h-14 border-b border-border bg-card flex items-center justify-between px-4 z-10">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center text-primary">
-            <Code2 size={18} />
+      <header className="flex-none h-12 border-b border-zinc-800 bg-zinc-950 flex items-center justify-between px-3 z-10 gap-2">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <button
+            onClick={() => setSidebarOpen((v) => !v)}
+            className="text-zinc-500 hover:text-zinc-300 transition-colors p-1 rounded"
+            data-testid="toggle-sidebar"
+          >
+            <ChevronRight
+              size={16}
+              className={["transition-transform duration-200", sidebarOpen ? "rotate-180" : ""].join(" ")}
+            />
+          </button>
+          <div className="w-6 h-6 rounded bg-emerald-500/15 flex items-center justify-center text-emerald-400 shrink-0">
+            <Code2 size={14} />
           </div>
-          <div>
-            <h1 className="text-sm font-semibold tracking-tight">Python Compiler</h1>
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              {isInitializing ? (
-                <>
-                  <Loader2 size={10} className="animate-spin" />
-                  <span>Loading Pyodide...</span>
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 size={10} className="text-primary" />
-                  <span>Ready</span>
-                </>
-              )}
-            </div>
+          <span className="text-sm font-semibold text-zinc-100 truncate">Python Compiler</span>
+          <div className="flex items-center gap-1 text-xs text-zinc-500 ml-1">
+            {isInitializing ? (
+              <>
+                <Loader2 size={10} className="animate-spin text-zinc-500" />
+                <span>Loading…</span>
+              </>
+            ) : (
+              <>
+                <CheckCircle2 size={10} className="text-emerald-500" />
+                <span className="text-emerald-600">Ready</span>
+              </>
+            )}
           </div>
         </div>
-        
-        <div className="flex items-center gap-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
+
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={clearOutput}
             disabled={output.length === 0}
-            className="h-8 gap-1.5 text-xs"
+            className="h-7 gap-1.5 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
             data-testid="clear-button"
           >
-            <Trash2 size={14} />
+            <Trash2 size={13} />
             Clear
           </Button>
-          <Button 
-            size="sm" 
-            onClick={handleRun} 
+          <Button
+            size="sm"
+            onClick={handleRun}
             disabled={!isReady || isRunning}
-            className="h-8 gap-1.5 text-xs bg-primary hover:bg-primary/90 text-primary-foreground font-medium w-[88px] relative overflow-hidden group"
+            className="h-7 gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-medium w-20 relative overflow-hidden"
             data-testid="run-button"
           >
             {isRunning ? (
-              <Loader2 size={14} className="animate-spin" />
+              <Loader2 size={13} className="animate-spin" />
             ) : (
               <>
-                <Play size={14} className="fill-current" />
+                <Play size={13} className="fill-current" />
                 Run
               </>
             )}
-            
-            {/* Click ripple effect container */}
-            {isRunning && (
-              <span className="absolute inset-0 bg-white/20 animate-pulse" />
-            )}
+            {isRunning && <span className="absolute inset-0 bg-white/10 animate-pulse" />}
           </Button>
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="flex-1 flex flex-col md:flex-row overflow-hidden" onKeyDown={handleKeyDown}>
-        {/* Editor Pane */}
-        <div className="flex-1 flex flex-col min-h-[50vh] md:min-h-0 border-r border-border" data-testid="code-editor">
-          <div className="flex-none h-9 border-b border-border bg-card/50 flex items-center px-4 text-xs text-muted-foreground font-medium uppercase tracking-wider">
-            main.py
+      {/* Body */}
+      <div className="flex flex-1 overflow-hidden" onKeyDown={handleKeyDown}>
+        {/* File Explorer Sidebar */}
+        {sidebarOpen && (
+          <aside className="w-48 shrink-0 flex flex-col border-r border-zinc-800 bg-zinc-950 overflow-hidden">
+            <div className="flex items-center justify-between px-3 h-8 border-b border-zinc-800">
+              <span className="text-[10px] uppercase tracking-widest text-zinc-500 font-semibold">Files</span>
+              <button
+                onClick={addFile}
+                className="text-zinc-500 hover:text-emerald-400 transition-colors rounded p-0.5"
+                title="New file"
+                data-testid="new-file-button"
+              >
+                <Plus size={14} />
+              </button>
+            </div>
+            <ScrollArea className="flex-1">
+              <div className="py-1">
+                {files.map((file, i) => (
+                  <div
+                    key={i}
+                    onClick={() => { setActiveIndex(i); setRenamingIndex(null); }}
+                    data-testid={`file-item-${i}`}
+                    className={[
+                      "group flex items-center gap-1.5 px-2 py-1.5 cursor-pointer select-none",
+                      i === activeIndex
+                        ? "bg-zinc-800 text-zinc-100"
+                        : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200",
+                    ].join(" ")}
+                  >
+                    <FileCode size={13} className={i === activeIndex ? "text-emerald-400 shrink-0" : "text-zinc-600 shrink-0"} />
+
+                    {renamingIndex === i ? (
+                      <input
+                        ref={renameInputRef}
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onBlur={commitRename}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") commitRename();
+                          if (e.key === "Escape") setRenamingIndex(null);
+                          e.stopPropagation();
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex-1 min-w-0 bg-zinc-700 text-zinc-100 text-xs rounded px-1 py-0 outline-none border border-emerald-500/60 font-mono"
+                        data-testid="rename-input"
+                      />
+                    ) : (
+                      <span className="flex-1 min-w-0 text-xs font-mono truncate">{file.name}</span>
+                    )}
+
+                    {renamingIndex !== i && (
+                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                        <button
+                          onClick={(e) => startRename(i, e)}
+                          className="hover:text-zinc-200 p-0.5 rounded"
+                          title="Rename"
+                          data-testid={`rename-file-${i}`}
+                        >
+                          <Pencil size={11} />
+                        </button>
+                        {files.length > 1 && (
+                          <button
+                            onClick={(e) => deleteFile(i, e)}
+                            className="hover:text-red-400 p-0.5 rounded"
+                            title="Delete"
+                            data-testid={`delete-file-${i}`}
+                          >
+                            <X size={11} />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          </aside>
+        )}
+
+        {/* Editor */}
+        <div className="flex-1 flex flex-col min-w-0 border-r border-zinc-800" data-testid="code-editor">
+          {/* Tab bar */}
+          <div className="flex-none h-8 border-b border-zinc-800 bg-zinc-950 flex items-center px-1 gap-0.5 overflow-x-auto">
+            {files.map((file, i) => (
+              <button
+                key={i}
+                onClick={() => setActiveIndex(i)}
+                className={[
+                  "flex items-center gap-1.5 px-3 h-full text-xs font-mono rounded-t transition-colors whitespace-nowrap shrink-0 border-b-2",
+                  i === activeIndex
+                    ? "bg-[#0a0a0a] text-zinc-100 border-emerald-500"
+                    : "text-zinc-500 hover:text-zinc-300 border-transparent hover:bg-zinc-800/50",
+                ].join(" ")}
+                data-testid={`tab-${i}`}
+              >
+                <FileCode size={11} className={i === activeIndex ? "text-emerald-400" : "text-zinc-600"} />
+                {file.name}
+              </button>
+            ))}
+            <button
+              onClick={addFile}
+              className="flex items-center justify-center w-7 h-full text-zinc-600 hover:text-emerald-400 transition-colors shrink-0"
+              title="New file"
+            >
+              <Plus size={13} />
+            </button>
           </div>
-          <div className="flex-1 relative bg-[#0a0a0a]">
+
+          {/* Monaco */}
+          <div className="flex-1 bg-[#0a0a0a]">
             <Editor
+              key={activeIndex}
               height="100%"
               defaultLanguage="python"
-              value={code}
-              onChange={(value) => setCode(value || "")}
-              theme="vs-dark" // Will be overridden by my-dark once loaded
+              value={activeFile?.content ?? ""}
+              onChange={handleCodeChange}
+              theme="vs-dark"
               options={{
                 minimap: { enabled: false },
                 fontSize: 14,
-                fontFamily: "JetBrains Mono, monospace",
+                fontFamily: "'JetBrains Mono', monospace",
                 lineHeight: 1.6,
                 padding: { top: 16, bottom: 16 },
                 scrollBeyondLastLine: false,
                 smoothScrolling: true,
                 cursorBlinking: "smooth",
                 cursorSmoothCaretAnimation: "on",
-                formatOnPaste: true,
                 suggest: { showWords: false },
               }}
               loading={
-                <div className="flex items-center justify-center h-full text-muted-foreground gap-2 text-sm">
+                <div className="flex items-center justify-center h-full text-zinc-500 gap-2 text-sm">
                   <Loader2 size={16} className="animate-spin" />
-                  Loading Editor...
+                  Loading Editor…
                 </div>
               }
             />
           </div>
         </div>
 
-        {/* Output Pane */}
-        <div className="flex-1 flex flex-col min-h-[30vh] md:min-h-0 bg-card" data-testid="output-panel">
-          <div className="flex-none h-9 border-b border-border bg-card/50 flex items-center px-4 text-xs text-muted-foreground font-medium uppercase tracking-wider gap-2">
-            <TerminalSquare size={14} />
+        {/* Output Panel */}
+        <div className="w-80 shrink-0 flex flex-col bg-zinc-950 md:w-[340px] lg:w-[400px]" data-testid="output-panel">
+          <div className="flex-none h-8 border-b border-zinc-800 flex items-center px-3 gap-2 text-[10px] uppercase tracking-widest text-zinc-500 font-semibold">
+            <TerminalSquare size={12} />
             Output
           </div>
           <ScrollArea className="flex-1 font-mono text-sm">
-            <div className="p-4 space-y-1.5">
+            <div className="p-4 space-y-1">
               {output.length === 0 ? (
-                <div className="text-muted-foreground/50 text-center mt-8 text-xs">
+                <p className="text-zinc-600 text-xs text-center mt-8">
                   Run some code to see output here.
-                </div>
+                </p>
               ) : (
                 output.map((line, i) => (
-                  <div 
-                    key={i} 
+                  <div
+                    key={i}
                     className={[
-                      "whitespace-pre-wrap break-all leading-relaxed",
-                      line.type === 'stderr' ? 'text-destructive' : '',
-                      line.type === 'system' ? 'text-muted-foreground italic' : '',
-                      line.type === 'stdout' ? 'text-foreground/90' : '',
-                    ].join(' ')}
+                      "whitespace-pre-wrap break-all leading-relaxed text-[13px]",
+                      line.type === "stderr" ? "text-red-400" : "",
+                      line.type === "system" ? "text-zinc-500 italic" : "",
+                      line.type === "stdout" ? "text-zinc-200" : "",
+                    ].join(" ")}
                   >
                     {line.text}
                   </div>
@@ -203,11 +403,7 @@ function IDE() {
             </div>
           </ScrollArea>
         </div>
-      </main>
+      </div>
     </div>
   );
-}
-
-export default function App() {
-  return <IDE />;
 }
