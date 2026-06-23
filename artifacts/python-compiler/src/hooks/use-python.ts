@@ -10,9 +10,17 @@ export type PyFile = {
   content: string;
 };
 
+export type CompletionItem = {
+  name: string;
+  type: string;
+  description: string;
+  docstring: string;
+};
+
 export function usePython() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [isReady, setIsReady] = useState(false);
+  const [jediReady, setJediReady] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [output, setOutput] = useState<OutputLine[]>([]);
   const [pyodideInstance, setPyodideInstance] = useState<any>(null);
@@ -30,12 +38,8 @@ export function usePython() {
           indexURL: "https://cdn.jsdelivr.net/pyodide/v0.27.5/full/",
         });
 
-        // Set up the workspace directory and add it to sys.path
-        try {
-          pyodide.FS.mkdir("/workspace");
-        } catch {
-          // Directory may already exist
-        }
+        // Set up workspace filesystem
+        try { pyodide.FS.mkdir("/workspace"); } catch { /* already exists */ }
 
         await pyodide.runPythonAsync(`
 import sys
@@ -47,6 +51,20 @@ if '/workspace' not in sys.path:
           setPyodideInstance(pyodide);
           setIsReady(true);
           setOutput([{ type: "system", text: "Python initialized and ready." }]);
+        }
+
+        // Install Jedi in the background for completions
+        try {
+          await pyodide.loadPackage("micropip");
+          await pyodide.runPythonAsync(`
+import micropip
+await micropip.install('jedi')
+`);
+          if (mounted) {
+            setJediReady(true);
+          }
+        } catch {
+          // Jedi unavailable — completions won't work, but the IDE still functions
         }
       } catch (err) {
         if (mounted) {
@@ -81,18 +99,16 @@ if '/workspace' not in sys.path:
       });
 
       try {
-        // Write all files to the virtual filesystem so they can be imported
+        // Write all files to virtual FS
         for (const file of files) {
-          const path = `/workspace/${file.name}`;
-          pyodideInstance.FS.writeFile(path, file.content, { encoding: "utf8" });
+          pyodideInstance.FS.writeFile(`/workspace/${file.name}`, file.content, { encoding: "utf8" });
         }
 
-        // Invalidate Python's import caches so re-imports pick up file changes
+        // Bust module import cache so re-runs pick up edited files
         await pyodideInstance.runPythonAsync(`
-import importlib
 import sys
-# Remove cached modules that correspond to workspace files so re-imports are fresh
-_to_remove = [k for k in sys.modules if not k.startswith('_') and k not in ('sys', 'importlib')]
+_to_remove = [k for k in list(sys.modules.keys())
+              if not k.startswith('_') and k not in ('sys', 'importlib', 'micropip', 'jedi', 'parso')]
 for _mod in _to_remove:
     sys.modules.pop(_mod, None)
 `);
@@ -108,9 +124,48 @@ for _mod in _to_remove:
     [isReady, pyodideInstance]
   );
 
-  const clearOutput = useCallback(() => {
-    setOutput([]);
-  }, []);
+  /**
+   * Get Jedi completions for the given code at (line, col).
+   * line is 1-indexed (Monaco convention), col is 1-indexed.
+   */
+  const getCompletions = useCallback(
+    async (
+      code: string,
+      line: number,
+      col: number,
+      filename: string = "main.py"
+    ): Promise<CompletionItem[]> => {
+      if (!pyodideInstance || !jediReady) return [];
+      try {
+        // Pass code via globals to avoid string escaping issues
+        pyodideInstance.globals.set("_jedi_code", code);
+        pyodideInstance.globals.set("_jedi_line", line);
+        pyodideInstance.globals.set("_jedi_col", col);
+        pyodideInstance.globals.set("_jedi_path", filename);
 
-  return { isInitializing, isReady, isRunning, output, runCode, clearOutput };
+        const result = await pyodideInstance.runPythonAsync(`
+import jedi, json
+_script = jedi.Script(_jedi_code, path=_jedi_path)
+_comps = _script.complete(_jedi_line, _jedi_col)
+json.dumps([
+  {
+    'name': c.name,
+    'type': c.type,
+    'description': c.description,
+    'docstring': c.docstring(raw=True)[:200] if c.type in ('function', 'class') else ''
+  }
+  for c in _comps[:80]
+])
+`);
+        return JSON.parse(result) as CompletionItem[];
+      } catch {
+        return [];
+      }
+    },
+    [pyodideInstance, jediReady]
+  );
+
+  const clearOutput = useCallback(() => { setOutput([]); }, []);
+
+  return { isInitializing, isReady, jediReady, isRunning, output, runCode, clearOutput, getCompletions };
 }

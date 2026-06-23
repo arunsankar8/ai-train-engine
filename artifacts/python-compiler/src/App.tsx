@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Editor, useMonaco } from "@monaco-editor/react";
+import type * as Monaco from "monaco-editor";
 import {
   Play, Trash2, TerminalSquare, Code2, CheckCircle2,
-  Loader2, Plus, FileCode, X, Pencil, ChevronRight,
+  Loader2, Plus, FileCode, X, Pencil, ChevronRight, Sparkles,
 } from "lucide-react";
 import { usePython, PyFile } from "@/hooks/use-python";
 import { Button } from "@/components/ui/button";
@@ -59,6 +60,22 @@ function generateNewFileName(files: PyFile[]): string {
   return `file${i}.py`;
 }
 
+function mapCompletionKind(monaco: typeof Monaco, type: string): Monaco.languages.CompletionItemKind {
+  const K = monaco.languages.CompletionItemKind;
+  switch (type) {
+    case "function": return K.Function;
+    case "class":    return K.Class;
+    case "module":   return K.Module;
+    case "keyword":  return K.Keyword;
+    case "instance": return K.Variable;
+    case "param":    return K.TypeParameter;
+    case "property": return K.Property;
+    case "statement":return K.Variable;
+    case "path":     return K.File;
+    default:         return K.Text;
+  }
+}
+
 export default function App() {
   const [files, setFiles] = useState<PyFile[]>(INITIAL_FILES);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -69,7 +86,18 @@ export default function App() {
   const outputEndRef = useRef<HTMLDivElement>(null);
   const monaco = useMonaco();
 
-  const { isInitializing, isReady, isRunning, output, runCode, clearOutput } = usePython();
+  const { isInitializing, isReady, jediReady, isRunning, output, runCode, clearOutput, getCompletions } =
+    usePython();
+
+  // Keep a stable ref to getCompletions so the Monaco provider doesn't need re-registration
+  const getCompletionsRef = useRef(getCompletions);
+  useEffect(() => { getCompletionsRef.current = getCompletions; }, [getCompletions]);
+
+  // Keep a stable ref to the active file name for use inside the completion provider
+  const activeFileNameRef = useRef(files[activeIndex]?.name ?? "main.py");
+  useEffect(() => {
+    activeFileNameRef.current = files[activeIndex]?.name ?? "main.py";
+  }, [files, activeIndex]);
 
   useEffect(() => {
     if (outputEndRef.current) {
@@ -84,27 +112,81 @@ export default function App() {
     }
   }, [renamingIndex]);
 
-  // Configure Monaco dark theme
+  // Register Monaco dark theme + Python completion provider
   useEffect(() => {
-    if (monaco) {
-      monaco.editor.defineTheme("my-dark", {
-        base: "vs-dark",
-        inherit: true,
-        rules: [
-          { token: "comment", foreground: "6b7280", fontStyle: "italic" },
-          { token: "keyword", foreground: "10b981" },
-          { token: "string", foreground: "fcd34d" },
-          { token: "number", foreground: "818cf8" },
-        ],
-        colors: {
-          "editor.background": "#0a0a0a",
-          "editor.lineHighlightBackground": "#171717",
-          "editorLineNumber.foreground": "#525252",
-          "editorIndentGuide.background": "#262626",
-        },
-      });
-      monaco.editor.setTheme("my-dark");
-    }
+    if (!monaco) return;
+
+    monaco.editor.defineTheme("my-dark", {
+      base: "vs-dark",
+      inherit: true,
+      rules: [
+        { token: "comment", foreground: "6b7280", fontStyle: "italic" },
+        { token: "keyword", foreground: "10b981" },
+        { token: "string",  foreground: "fcd34d" },
+        { token: "number",  foreground: "818cf8" },
+      ],
+      colors: {
+        "editor.background": "#0a0a0a",
+        "editor.lineHighlightBackground": "#171717",
+        "editorLineNumber.foreground": "#525252",
+        "editorIndentGuide.background": "#262626",
+      },
+    });
+    monaco.editor.setTheme("my-dark");
+
+    // Register Jedi-powered completion provider for Python
+    const provider = monaco.languages.registerCompletionItemProvider("python", {
+      triggerCharacters: [".", "(", " ", "\n",
+        "a","b","c","d","e","f","g","h","i","j","k","l","m",
+        "n","o","p","q","r","s","t","u","v","w","x","y","z",
+        "A","B","C","D","E","F","G","H","I","J","K","L","M",
+        "N","O","P","Q","R","S","T","U","V","W","X","Y","Z","_"],
+      provideCompletionItems: async (
+        model: Monaco.editor.ITextModel,
+        position: Monaco.Position
+      ): Promise<Monaco.languages.CompletionList> => {
+        const code = model.getValue();
+        const line = position.lineNumber;     // 1-indexed (matches Jedi)
+        const col  = position.column - 1;    // Jedi uses 0-indexed columns
+
+        const items = await getCompletionsRef.current(code, line, col, activeFileNameRef.current);
+        if (!items.length) return { suggestions: [] };
+
+        // Build a word range so Monaco replaces the right text on accept
+        const word = model.getWordUntilPosition(position);
+        const range: Monaco.IRange = {
+          startLineNumber: position.lineNumber,
+          endLineNumber:   position.lineNumber,
+          startColumn: word.startColumn,
+          endColumn:   position.column,
+        };
+
+        const suggestions: Monaco.languages.CompletionItem[] = items.map((c) => {
+          const kind = mapCompletionKind(monaco, c.type);
+          const isCallable = c.type === "function" || c.type === "class";
+
+          return {
+            label: {
+              label: c.name,
+              description: c.description || undefined,
+            },
+            kind,
+            insertText: isCallable ? `${c.name}($1)` : c.name,
+            insertTextRules: isCallable
+              ? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
+              : undefined,
+            detail: c.description || c.type,
+            documentation: c.docstring ? { value: c.docstring } : undefined,
+            range,
+            sortText: c.type === "keyword" ? "z" + c.name : c.name,
+          };
+        });
+
+        return { suggestions };
+      },
+    });
+
+    return () => provider.dispose();
   }, [monaco]);
 
   const activeFile = files[activeIndex] ?? files[0];
@@ -185,17 +267,37 @@ export default function App() {
             <Code2 size={14} />
           </div>
           <span className="text-sm font-semibold text-zinc-100 truncate">Python Compiler</span>
-          <div className="flex items-center gap-1 text-xs text-zinc-500 ml-1">
-            {isInitializing ? (
-              <>
-                <Loader2 size={10} className="animate-spin text-zinc-500" />
-                <span>Loading…</span>
-              </>
-            ) : (
-              <>
-                <CheckCircle2 size={10} className="text-emerald-500" />
-                <span className="text-emerald-600">Ready</span>
-              </>
+
+          {/* Status indicators */}
+          <div className="flex items-center gap-3 ml-1">
+            <div className="flex items-center gap-1 text-xs text-zinc-500">
+              {isInitializing ? (
+                <>
+                  <Loader2 size={10} className="animate-spin" />
+                  <span>Loading…</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 size={10} className="text-emerald-500" />
+                  <span className="text-emerald-600">Ready</span>
+                </>
+              )}
+            </div>
+            {/* Jedi / autocomplete status */}
+            {!isInitializing && (
+              <div className="flex items-center gap-1 text-xs" title={jediReady ? "Jedi autocomplete active" : "Loading autocomplete…"}>
+                {jediReady ? (
+                  <>
+                    <Sparkles size={10} className="text-violet-400" />
+                    <span className="text-violet-500">Autocomplete</span>
+                  </>
+                ) : (
+                  <>
+                    <Loader2 size={10} className="animate-spin text-zinc-600" />
+                    <span className="text-zinc-600">Autocomplete…</span>
+                  </>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -262,7 +364,10 @@ export default function App() {
                         : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200",
                     ].join(" ")}
                   >
-                    <FileCode size={13} className={i === activeIndex ? "text-emerald-400 shrink-0" : "text-zinc-600 shrink-0"} />
+                    <FileCode
+                      size={13}
+                      className={i === activeIndex ? "text-emerald-400 shrink-0" : "text-zinc-600 shrink-0"}
+                    />
 
                     {renamingIndex === i ? (
                       <input
@@ -341,7 +446,7 @@ export default function App() {
             </button>
           </div>
 
-          {/* Monaco */}
+          {/* Monaco editor */}
           <div className="flex-1 bg-[#0a0a0a]">
             <Editor
               key={activeIndex}
@@ -349,7 +454,7 @@ export default function App() {
               defaultLanguage="python"
               value={activeFile?.content ?? ""}
               onChange={handleCodeChange}
-              theme="vs-dark"
+              theme="my-dark"
               options={{
                 minimap: { enabled: false },
                 fontSize: 14,
@@ -360,7 +465,20 @@ export default function App() {
                 smoothScrolling: true,
                 cursorBlinking: "smooth",
                 cursorSmoothCaretAnimation: "on",
-                suggest: { showWords: false },
+                // Disable word-based suggestions so only Jedi results show
+                wordBasedSuggestions: "off",
+                suggest: {
+                  showWords: false,
+                  preview: true,
+                  showIcons: true,
+                },
+                quickSuggestions: {
+                  other: true,
+                  comments: false,
+                  strings: false,
+                },
+                quickSuggestionsDelay: 120,
+                parameterHints: { enabled: true },
               }}
               loading={
                 <div className="flex items-center justify-center h-full text-zinc-500 gap-2 text-sm">
@@ -373,7 +491,10 @@ export default function App() {
         </div>
 
         {/* Output Panel */}
-        <div className="w-80 shrink-0 flex flex-col bg-zinc-950 md:w-[340px] lg:w-[400px]" data-testid="output-panel">
+        <div
+          className="w-80 shrink-0 flex flex-col bg-zinc-950 md:w-[340px] lg:w-[400px]"
+          data-testid="output-panel"
+        >
           <div className="flex-none h-8 border-b border-zinc-800 flex items-center px-3 gap-2 text-[10px] uppercase tracking-widest text-zinc-500 font-semibold">
             <TerminalSquare size={12} />
             Output
