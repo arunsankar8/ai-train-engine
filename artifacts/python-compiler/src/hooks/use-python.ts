@@ -145,6 +145,18 @@ for _mod in _to_remove:
 
         const result = await pyodideInstance.runPythonAsync(`
 import jedi, json
+
+def _get_doc(c):
+    try:
+        raw = c.docstring(raw=True)
+        if not raw:
+            return ''
+        # Return first meaningful paragraph, up to 600 chars
+        paras = [p.strip() for p in raw.split('\\n\\n') if p.strip()]
+        return paras[0][:600] if paras else raw[:600]
+    except Exception:
+        return ''
+
 _script = jedi.Script(_jedi_code, path=_jedi_path)
 _comps = _script.complete(_jedi_line, _jedi_col)
 json.dumps([
@@ -152,7 +164,7 @@ json.dumps([
     'name': c.name,
     'type': c.type,
     'description': c.description,
-    'docstring': c.docstring(raw=True)[:200] if c.type in ('function', 'class') else ''
+    'docstring': _get_doc(c)
   }
   for c in _comps[:80]
 ])

@@ -165,18 +165,32 @@ export default function App() {
           const kind = mapCompletionKind(monaco, c.type);
           const isCallable = c.type === "function" || c.type === "class";
 
+          // Build a markdown documentation string shown in Monaco's detail panel
+          const docParts: string[] = [];
+          if (c.description) {
+            docParts.push("```python\n" + c.description + "\n```");
+          }
+          if (c.docstring) {
+            docParts.push(c.docstring);
+          }
+          const documentation = docParts.length
+            ? { value: docParts.join("\n\n"), isTrusted: true }
+            : undefined;
+
           return {
             label: {
               label: c.name,
-              description: c.description || undefined,
+              // Show type label inline in the dropdown (e.g. "def random() -> float")
+              description: c.description || c.type,
             },
             kind,
             insertText: isCallable ? `${c.name}($1)` : c.name,
             insertTextRules: isCallable
               ? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
               : undefined,
+            // `detail` shows as grayed text right of the label
             detail: c.description || c.type,
-            documentation: c.docstring ? { value: c.docstring } : undefined,
+            documentation,
             range,
             sortText: c.type === "keyword" ? "z" + c.name : c.name,
           };
