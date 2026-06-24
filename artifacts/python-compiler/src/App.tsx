@@ -3,11 +3,12 @@ import { Editor, useMonaco } from "@monaco-editor/react";
 import type * as Monaco from "monaco-editor";
 import {
   Play, Trash2, TerminalSquare, Code2, CheckCircle2,
-  Loader2, Plus, FileCode, X, Pencil, ChevronRight, Sparkles,
+  Loader2, Plus, FileCode, X, Pencil, ChevronRight, Sparkles, BookOpen,
 } from "lucide-react";
 import { usePython, PyFile } from "@/hooks/use-python";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import ReferencePanel from "@/components/ReferencePanel";
 
 const INITIAL_FILES: PyFile[] = [
   {
@@ -44,11 +45,12 @@ export default function App() {
   const [renamingIndex, setRenamingIndex] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [refPanelOpen, setRefPanelOpen] = useState(false);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const outputEndRef = useRef<HTMLDivElement>(null);
   const monaco = useMonaco();
 
-  const { isInitializing, isReady, jediReady, isRunning, output, runCode, clearOutput, getCompletions, getHover } =
+  const { isInitializing, isReady, jediReady, isRunning, output, runCode, clearOutput, getCompletions, getHover, getDocumentation } =
     usePython();
 
   // Keep stable refs so Monaco providers don't need re-registration on every render
@@ -341,6 +343,19 @@ export default function App() {
           <Button
             variant="ghost"
             size="sm"
+            onClick={() => setRefPanelOpen((v) => !v)}
+            className={[
+              "h-7 gap-1.5 text-xs hover:bg-zinc-800",
+              refPanelOpen ? "text-violet-400 hover:text-violet-300" : "text-zinc-400 hover:text-zinc-200",
+            ].join(" ")}
+            title="Python Reference"
+          >
+            <BookOpen size={13} />
+            Reference
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={clearOutput}
             disabled={output.length === 0}
             className="h-7 gap-1.5 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
@@ -541,6 +556,15 @@ export default function App() {
             />
           </div>
         </div>
+
+        {/* Reference Panel */}
+        {refPanelOpen && (
+          <ReferencePanel
+            onClose={() => setRefPanelOpen(false)}
+            getDocumentation={getDocumentation}
+            pyodideReady={isReady}
+          />
+        )}
 
         {/* Output Panel */}
         <div

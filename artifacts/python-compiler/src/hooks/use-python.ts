@@ -231,7 +231,70 @@ json.dumps(_results[0] if _results else None)
     [pyodideInstance, jediReady]
   );
 
+  /**
+   * Fetch pydoc documentation for a query string.
+   * kind: 'keyword' | 'topic' | 'builtin' | 'type' | 'module' | 'exception'
+   */
+  const getDocumentation = useCallback(
+    async (query: string, kind: string): Promise<string | null> => {
+      if (!pyodideInstance) return null;
+      try {
+        pyodideInstance.globals.set("_doc_query", query);
+        pyodideInstance.globals.set("_doc_kind", kind);
+
+        const result = await pyodideInstance.runPythonAsync(`
+import pydoc, inspect, importlib, builtins as _builtins, sys
+
+_q = _doc_query
+_k = _doc_kind
+
+def _fetch():
+    try:
+        if _k in ('keyword', 'topic'):
+            # pydoc.render_doc handles Python keywords and TOPIC strings natively
+            try:
+                return pydoc.render_doc(_q, renderer=pydoc.plaintext)
+            except Exception:
+                pass
+
+        if _k == 'module':
+            try:
+                mod = importlib.import_module(_q)
+                return pydoc.render_doc(mod, renderer=pydoc.plaintext)
+            except ImportError:
+                return f"Module '{_q}' could not be imported in this environment."
+
+        if _k in ('builtin', 'type', 'exception'):
+            obj = getattr(_builtins, _q, None)
+            if obj is not None:
+                return pydoc.render_doc(obj, renderer=pydoc.plaintext)
+
+        # Fallback: dotted name like urllib.parse
+        parts = _q.split('.')
+        try:
+            mod = importlib.import_module(parts[0])
+            obj = mod
+            for p in parts[1:]:
+                obj = getattr(obj, p)
+            return pydoc.render_doc(obj, renderer=pydoc.plaintext)
+        except Exception:
+            pass
+
+        return f"No documentation found for '{_q}'."
+    except Exception as e:
+        return f"Error retrieving docs: {str(e)}"
+
+_fetch()
+`);
+        return result as string;
+      } catch {
+        return null;
+      }
+    },
+    [pyodideInstance]
+  );
+
   const clearOutput = useCallback(() => { setOutput([]); }, []);
 
-  return { isInitializing, isReady, jediReady, isRunning, output, runCode, clearOutput, getCompletions, getHover };
+  return { isInitializing, isReady, jediReady, isRunning, output, runCode, clearOutput, getCompletions, getHover, getDocumentation };
 }
