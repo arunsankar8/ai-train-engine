@@ -31,75 +31,91 @@ function highlight(text: string, query: string): React.ReactNode {
   );
 }
 
-// Format raw pydoc plaintext into readable sections
+// Render pydoc help() output — split into lines and colour section headers
 function formatDoc(raw: string): React.ReactNode {
   const lines = raw.split("\n");
   const nodes: React.ReactNode[] = [];
-  let inCodeBlock = false;
-  let codeLines: string[] = [];
   let key = 0;
+  let i = 0;
 
-  const flushCode = () => {
-    if (codeLines.length) {
-      nodes.push(
-        <pre key={key++} className="bg-zinc-900 border border-zinc-700 rounded p-3 text-xs font-mono text-emerald-300 overflow-x-auto whitespace-pre my-2">
-          {codeLines.join("\n")}
-        </pre>
-      );
-      codeLines = [];
-    }
-    inCodeBlock = false;
+  // pydoc section headers are ALL-CAPS words on their own line (NAME, FUNCTIONS, etc.)
+  const isSectionHeader = (line: string) => {
+    const t = line.trim();
+    return (
+      t.length > 1 &&
+      t.length < 40 &&
+      t === t.toUpperCase() &&
+      /^[A-Z][A-Z\s_-]+$/.test(t)
+    );
   };
 
-  for (let i = 0; i < lines.length; i++) {
+  // Underline / dashed separator lines — skip them
+  const isSeparator = (line: string) => /^[=\-*#]{3,}$/.test(line.trim());
+
+  while (i < lines.length) {
     const line = lines[i];
     const trimmed = line.trim();
+    i++;
 
-    // Detect code blocks: lines indented 4+ spaces or starting with >>>
-    const isCode = line.startsWith("    ") || trimmed.startsWith(">>>");
-    if (isCode) {
-      inCodeBlock = true;
-      codeLines.push(line);
-      continue;
-    }
-
-    if (inCodeBlock) flushCode();
-
-    // Empty line
     if (!trimmed) {
-      nodes.push(<div key={key++} className="h-2" />);
+      nodes.push(<div key={key++} className="h-1.5" />);
       continue;
     }
 
-    // Section headers: ALL CAPS lines or lines ending with ':'
-    const isHeader =
-      (trimmed === trimmed.toUpperCase() && trimmed.length > 2 && /[A-Z]/.test(trimmed)) ||
-      (trimmed.endsWith(":") && trimmed.length < 60 && !trimmed.includes(" ") === false && i > 0);
+    if (isSeparator(trimmed)) continue;
 
-    if (isHeader && !trimmed.includes("(") && !trimmed.startsWith("-") && !trimmed.startsWith("|")) {
+    if (isSectionHeader(trimmed)) {
       nodes.push(
-        <p key={key++} className="text-violet-400 font-semibold text-xs mt-4 mb-1 uppercase tracking-wider">
-          {trimmed.replace(/:$/, "")}
+        <p key={key++} className="text-violet-400 font-bold text-[11px] uppercase tracking-widest mt-5 mb-1 border-b border-zinc-800 pb-1">
+          {trimmed}
         </p>
       );
       continue;
     }
 
-    // Pipe-separated tables
-    if (trimmed.startsWith("|")) {
+    // "Help on …" header line
+    if (trimmed.startsWith("Help on ")) {
       nodes.push(
-        <p key={key++} className="font-mono text-xs text-zinc-400">{trimmed}</p>
+        <p key={key++} className="text-zinc-500 text-xs italic mb-3">{trimmed}</p>
       );
       continue;
     }
 
-    // Normal text
+    // Lines that look like function/class signatures (contain parens, no leading spaces)
+    const isSignature =
+      !line.startsWith("  ") &&
+      (trimmed.includes("(") || trimmed.endsWith(":")) &&
+      !trimmed.startsWith("#") &&
+      !trimmed.startsWith("|") &&
+      trimmed.length < 200;
+
+    if (isSignature && /^[a-zA-Z_]/.test(trimmed)) {
+      nodes.push(
+        <pre key={key++} className="font-mono text-emerald-300 text-xs bg-zinc-900 rounded px-2 py-0.5 my-1 overflow-x-auto whitespace-pre-wrap">
+          {trimmed}
+        </pre>
+      );
+      continue;
+    }
+
+    // Indented lines — code / body text
+    if (line.startsWith("    ") || line.startsWith("\t")) {
+      nodes.push(
+        <p key={key++} className="font-mono text-xs text-zinc-400 leading-relaxed pl-4 whitespace-pre-wrap">
+          {trimmed}
+        </p>
+      );
+      continue;
+    }
+
+    // Regular text
     nodes.push(
-      <p key={key++} className="text-zinc-300 text-sm leading-relaxed">{trimmed}</p>
+      <p key={key++} className="text-zinc-300 text-sm leading-relaxed">
+        {trimmed}
+      </p>
     );
   }
 
-  if (inCodeBlock) flushCode();
   return <>{nodes}</>;
 }
 

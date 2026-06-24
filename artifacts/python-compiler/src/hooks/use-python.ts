@@ -208,15 +208,26 @@ import jedi, json, sys
 
 _project = jedi.Project(path='/workspace', added_sys_path=sys.path)
 _script = jedi.Script(_jedi_code, path=_jedi_path, project=_project)
-_names = _script.help(_jedi_line, _jedi_col)
+
+# infer() gives full type info + docstrings; fall back to help()
+_names = _script.infer(_jedi_line, _jedi_col)
+if not _names:
+    _names = _script.help(_jedi_line, _jedi_col)
 
 def _format(n):
     try:
-        raw = n.docstring(raw=True) or ''
+        sig = n.description or n.name
+        raw = ''
+        try:
+            raw = n.docstring(raw=True) or ''
+        except Exception:
+            pass
+        if not sig and not raw:
+            return None
         return {
-            'signature': n.description or n.name,
+            'signature': sig,
             'type': n.type or '',
-            'docstring': raw[:1200],
+            'docstring': raw[:2000],
         }
     except Exception:
         return None
@@ -244,44 +255,70 @@ json.dumps(_results[0] if _results else None)
         pyodideInstance.globals.set("_doc_kind", kind);
 
         const result = await pyodideInstance.runPythonAsync(`
-import pydoc, inspect, importlib, builtins as _builtins, sys
+import pydoc, io, sys, importlib, builtins as _builtins
 
 _q = _doc_query
 _k = _doc_kind
 
+def _capture_help(target):
+    """Capture pydoc.help() output as a string."""
+    old_out = sys.stdout
+    sys.stdout = buf = io.StringIO()
+    try:
+        pydoc.help(target)
+    except Exception:
+        pass
+    finally:
+        sys.stdout = old_out
+    return buf.getvalue().strip()
+
 def _fetch():
     try:
+        # Keywords and pydoc TOPICS — use captured help() directly
         if _k in ('keyword', 'topic'):
-            # pydoc.render_doc handles Python keywords and TOPIC strings natively
-            try:
-                return pydoc.render_doc(_q, renderer=pydoc.plaintext)
-            except Exception:
-                pass
+            text = _capture_help(_q)
+            if text and 'no Python documentation' not in text.lower() and len(text) > 30:
+                return text
+            return f"No documentation available for '{_q}' in this environment."
 
+        # Modules — import then help
         if _k == 'module':
+            parts = _q.split('.')
             try:
                 mod = importlib.import_module(_q)
-                return pydoc.render_doc(mod, renderer=pydoc.plaintext)
+                text = _capture_help(mod)
+                return text if text else f"Module '{_q}' loaded but has no documentation."
             except ImportError:
-                return f"Module '{_q}' could not be imported in this environment."
+                return f"Module '{_q}' is not available in this environment (Pyodide ships a subset of stdlib)."
 
+        # Builtins, types, exceptions — getattr from builtins then help
         if _k in ('builtin', 'type', 'exception'):
             obj = getattr(_builtins, _q, None)
             if obj is not None:
-                return pydoc.render_doc(obj, renderer=pydoc.plaintext)
+                return _capture_help(obj)
+            # Try as string (pydoc looks up by name)
+            text = _capture_help(_q)
+            if text and len(text) > 30:
+                return text
+            return f"'{_q}' not found in builtins."
 
-        # Fallback: dotted name like urllib.parse
+        # Fallback: dotted names like urllib.parse
         parts = _q.split('.')
         try:
             mod = importlib.import_module(parts[0])
             obj = mod
             for p in parts[1:]:
                 obj = getattr(obj, p)
-            return pydoc.render_doc(obj, renderer=pydoc.plaintext)
+            return _capture_help(obj)
         except Exception:
             pass
 
+        # Last resort: pass string to help()
+        text = _capture_help(_q)
+        if text and len(text) > 30:
+            return text
         return f"No documentation found for '{_q}'."
+
     except Exception as e:
         return f"Error retrieving docs: {str(e)}"
 
