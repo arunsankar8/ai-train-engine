@@ -144,20 +144,21 @@ for _mod in _to_remove:
         pyodideInstance.globals.set("_jedi_path", filename);
 
         const result = await pyodideInstance.runPythonAsync(`
-import jedi, json
+import jedi, json, sys
 
 def _get_doc(c):
     try:
         raw = c.docstring(raw=True)
         if not raw:
             return ''
-        # Return first meaningful paragraph, up to 600 chars
         paras = [p.strip() for p in raw.split('\\n\\n') if p.strip()]
         return paras[0][:600] if paras else raw[:600]
     except Exception:
         return ''
 
-_script = jedi.Script(_jedi_code, path=_jedi_path)
+# Give Jedi the full Pyodide sys.path so it can resolve stdlib modules (random, os, etc.)
+_project = jedi.Project(path='/workspace', added_sys_path=sys.path)
+_script = jedi.Script(_jedi_code, path=_jedi_path, project=_project)
 _comps = _script.complete(_jedi_line, _jedi_col)
 json.dumps([
   {
