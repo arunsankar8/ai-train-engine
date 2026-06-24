@@ -30,13 +30,11 @@ jobs:
           cache: "pnpm"
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install
 
       - name: Build
-        run: pnpm --filter @workspace/python-compiler run build
+        run: pnpm --filter @workspace/python-compiler exec vite build --config vite.config.github.ts
         env:
-          PORT: "3000"
-          BASE_PATH: /ai-train-engine/
           NODE_ENV: production
 
       - name: Upload Pages artifact
