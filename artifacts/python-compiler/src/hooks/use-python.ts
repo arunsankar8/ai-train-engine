@@ -95,6 +95,7 @@ await micropip.install('jedi')
       }
 
       setIsRunning(true);
+      setOutput([]);
       const localOutput: OutputLine[] = [];
 
       pyodideInstance.setStdout({
