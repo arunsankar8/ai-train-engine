@@ -12,45 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 const INITIAL_FILES: PyFile[] = [
   {
     name: "main.py",
-    content: `# Welcome to Python Compiler!
-# Press Ctrl+Enter or click Run to execute
-
-from utils import add, multiply
-
-def greet(name):
-    return f"Hello, {name}!"
-
-print(greet("World"))
-print("Python is running in your browser via Pyodide!")
-
-# Import from another file
-result = add(7, 3)
-print(f"7 + 3 = {result}")
-
-product = multiply(4, 5)
-print(f"4 × 5 = {product}")
-
-# Try some math
-import math
-print(f"π ≈ {math.pi:.4f}")
-`,
-  },
-  {
-    name: "utils.py",
-    content: `# Utility functions — import these in main.py
-# Example: from utils import add, multiply
-
-def add(a, b):
-    return a + b
-
-def multiply(a, b):
-    return a * b
-
-def factorial(n):
-    if n <= 1:
-        return 1
-    return n * factorial(n - 1)
-`,
+    content: "",
   },
 ];
 
@@ -136,11 +98,8 @@ export default function App() {
 
     // Register Jedi-powered completion provider for Python
     const provider = monaco.languages.registerCompletionItemProvider("python", {
-      triggerCharacters: [".", "(", " ", "\n",
-        "a","b","c","d","e","f","g","h","i","j","k","l","m",
-        "n","o","p","q","r","s","t","u","v","w","x","y","z",
-        "A","B","C","D","E","F","G","H","I","J","K","L","M",
-        "N","O","P","Q","R","S","T","U","V","W","X","Y","Z","_"],
+      // Only trigger explicitly on dot — Monaco's quickSuggestions handles word typing
+      triggerCharacters: ["."],
       provideCompletionItems: async (
         model: Monaco.editor.ITextModel,
         position: Monaco.Position
@@ -219,9 +178,17 @@ export default function App() {
     runCode(activeFile.content, files);
   }, [isReady, isRunning, activeFile, files, runCode]);
 
+  // Stable ref so Monaco's onMount can always call the latest handleRun
+  const handleRunRef = useRef(handleRun);
+  useEffect(() => { handleRunRef.current = handleRun; }, [handleRun]);
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey || e.shiftKey) && e.key === "Enter") {
+        e.preventDefault();
+        handleRun();
+      }
+      if (e.key === "F5") {
         e.preventDefault();
         handleRun();
       }
@@ -469,6 +436,17 @@ export default function App() {
               value={activeFile?.content ?? ""}
               onChange={handleCodeChange}
               theme="my-dark"
+              onMount={(editor, monacoInstance) => {
+                // F5 to run — bound inside Monaco so it works when editor has focus
+                editor.addCommand(monacoInstance.KeyCode.F5, () => {
+                  handleRunRef.current();
+                });
+                // Ctrl+Enter / Shift+Enter inside Monaco
+                editor.addCommand(
+                  monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.Enter,
+                  () => { handleRunRef.current(); }
+                );
+              }}
               options={{
                 minimap: { enabled: false },
                 fontSize: 14,
@@ -479,19 +457,25 @@ export default function App() {
                 smoothScrolling: true,
                 cursorBlinking: "smooth",
                 cursorSmoothCaretAnimation: "on",
-                // Disable word-based suggestions so only Jedi results show
                 wordBasedSuggestions: "off",
                 suggest: {
                   showWords: false,
                   preview: true,
                   showIcons: true,
+                  // Only accept with Tab or Enter, not on other commit characters
+                  acceptSuggestionOnCommitCharacter: false,
                 },
+                // Show suggestions while typing, never on click
                 quickSuggestions: {
-                  other: true,
+                  other: "on",
                   comments: false,
                   strings: false,
                 },
-                quickSuggestionsDelay: 120,
+                quickSuggestionsDelay: 200,
+                // Do not open suggestion widget on trigger chars from mouse click
+                suggestOnTriggerCharacters: true,
+                acceptSuggestionOnEnter: "on",
+                tabCompletion: "on",
                 parameterHints: { enabled: true },
               }}
               loading={
