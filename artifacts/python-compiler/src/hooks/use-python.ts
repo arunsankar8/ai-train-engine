@@ -17,6 +17,12 @@ export type CompletionItem = {
   docstring: string;
 };
 
+export type HoverInfo = {
+  signature: string;
+  docstring: string;
+  type: string;
+};
+
 export function usePython() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [isReady, setIsReady] = useState(false);
@@ -178,7 +184,54 @@ json.dumps([
     [pyodideInstance, jediReady]
   );
 
+  /**
+   * Get Jedi hover info (signature + docstring) for the symbol at (line, col).
+   * line is 1-indexed, col is 0-indexed.
+   */
+  const getHover = useCallback(
+    async (
+      code: string,
+      line: number,
+      col: number,
+      filename: string = "main.py"
+    ): Promise<HoverInfo | null> => {
+      if (!pyodideInstance || !jediReady) return null;
+      try {
+        pyodideInstance.globals.set("_jedi_code", code);
+        pyodideInstance.globals.set("_jedi_line", line);
+        pyodideInstance.globals.set("_jedi_col", col);
+        pyodideInstance.globals.set("_jedi_path", filename);
+
+        const result = await pyodideInstance.runPythonAsync(`
+import jedi, json, sys
+
+_project = jedi.Project(path='/workspace', added_sys_path=sys.path)
+_script = jedi.Script(_jedi_code, path=_jedi_path, project=_project)
+_names = _script.help(_jedi_line, _jedi_col)
+
+def _format(n):
+    try:
+        raw = n.docstring(raw=True) or ''
+        return {
+            'signature': n.description or n.name,
+            'type': n.type or '',
+            'docstring': raw[:1200],
+        }
+    except Exception:
+        return None
+
+_results = [r for r in (_format(n) for n in _names) if r]
+json.dumps(_results[0] if _results else None)
+`);
+        return JSON.parse(result) as HoverInfo | null;
+      } catch {
+        return null;
+      }
+    },
+    [pyodideInstance, jediReady]
+  );
+
   const clearOutput = useCallback(() => { setOutput([]); }, []);
 
-  return { isInitializing, isReady, jediReady, isRunning, output, runCode, clearOutput, getCompletions };
+  return { isInitializing, isReady, jediReady, isRunning, output, runCode, clearOutput, getCompletions, getHover };
 }

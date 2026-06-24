@@ -48,12 +48,15 @@ export default function App() {
   const outputEndRef = useRef<HTMLDivElement>(null);
   const monaco = useMonaco();
 
-  const { isInitializing, isReady, jediReady, isRunning, output, runCode, clearOutput, getCompletions } =
+  const { isInitializing, isReady, jediReady, isRunning, output, runCode, clearOutput, getCompletions, getHover } =
     usePython();
 
-  // Keep a stable ref to getCompletions so the Monaco provider doesn't need re-registration
+  // Keep stable refs so Monaco providers don't need re-registration on every render
   const getCompletionsRef = useRef(getCompletions);
   useEffect(() => { getCompletionsRef.current = getCompletions; }, [getCompletions]);
+
+  const getHoverRef = useRef(getHover);
+  useEffect(() => { getHoverRef.current = getHover; }, [getHover]);
 
   // Keep a stable ref to the active file name for use inside the completion provider
   const activeFileNameRef = useRef(files[activeIndex]?.name ?? "main.py");
@@ -96,7 +99,55 @@ export default function App() {
     });
     monaco.editor.setTheme("my-dark");
 
-    // Register Jedi-powered completion provider for Python
+    // Hover provider — shows signature + docstring when user hovers a symbol
+    const hoverProvider = monaco.languages.registerHoverProvider("python", {
+      provideHover: async (
+        model: Monaco.editor.ITextModel,
+        position: Monaco.Position
+      ): Promise<Monaco.languages.Hover | null> => {
+        const code = model.getValue();
+        const line = position.lineNumber;
+        const col  = position.column - 1; // Jedi uses 0-indexed columns
+
+        const info = await getHoverRef.current(code, line, col, activeFileNameRef.current);
+        if (!info) return null;
+
+        const parts: string[] = [];
+
+        // Signature block
+        if (info.signature) {
+          parts.push("```python\n" + info.signature + "\n```");
+        }
+
+        // Formatted docstring
+        if (info.docstring) {
+          const doc = info.docstring.trim();
+          // Split on double-newlines to get paragraphs
+          const paragraphs = doc.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+          // Show up to 4 paragraphs so the popup isn't overwhelming
+          parts.push(paragraphs.slice(0, 4).join("\n\n"));
+        }
+
+        if (parts.length === 0) return null;
+
+        // Highlight the hovered word range
+        const word = model.getWordAtPosition(position);
+        const range: Monaco.IRange | undefined = word
+          ? {
+              startLineNumber: position.lineNumber,
+              endLineNumber:   position.lineNumber,
+              startColumn: word.startColumn,
+              endColumn:   word.endColumn,
+            }
+          : undefined;
+
+        return {
+          contents: [{ value: parts.join("\n\n---\n\n"), isTrusted: true }],
+          range,
+        };
+      },
+    });
+
     const provider = monaco.languages.registerCompletionItemProvider("python", {
       // Only trigger explicitly on dot — Monaco's quickSuggestions handles word typing
       triggerCharacters: ["."],
@@ -159,7 +210,10 @@ export default function App() {
       },
     });
 
-    return () => provider.dispose();
+    return () => {
+      hoverProvider.dispose();
+      provider.dispose();
+    };
   }, [monaco]);
 
   const activeFile = files[activeIndex] ?? files[0];
