@@ -8,6 +8,24 @@
 
 ---
 
+## Pre-Roadmap — Applied Orientation (front-loaded, ~8 weeks)
+
+**Decision (24 June 2026):** Before starting Unit 0, I'm fully completing Ed Donner's *LLM Engineering* course on Udemy as an applied front-load. Goal: get building fast, become visible, and try to land project allocation at work — then run this roadmap underneath for the deep, rare skills.
+
+**Why this is a valid reordering, not a detour:** the course is the *upper trunk* (applied LLMs). It maps onto Units 9-14 (HuggingFace, prompting, fine-tuning/QLoRA, RAG, agents/function-calling, Gradio UIs). Doing it first = applied → foundations → spike.
+
+**What the course covers (accelerate these units later):** Units 9, 10, 12, 13, 14, plus the full-stack side of Phase 6.
+
+**What the course does NOT cover (still mandatory, do not skip):**
+- Units 1-7 — math intuition, NN from scratch, PyTorch, classical ML, Karpathy, build-GPT (the foundations / "reverse-engineer models" goal)
+- Units 15-16 — quantization + ON-DEVICE inference (Phase 5, the moat / signature piece)
+
+**The one rule for this front-load:** the course is the START, not the finish. It covers ~35-40% of this roadmap, all from the crowded applied layer, and none of the on-device differentiator. Finishing it will *feel* like finishing AI. It isn't. Come back to Unit 0.
+
+**On the "falling behind" fear:** the crowd making AI projects lives at the course's layer — real, useful, and commoditizing fast. The scarce combination (models from the math up + shipping them on a phone offline) is what this roadmap targets, and almost no one is racing there. The mobile background doesn't expire.
+
+---
+
 ## How to use this tracker
 
 - Tick `[ ]` → `[x]` as you complete each item. Check off from your phone with the GitHub mobile app.
