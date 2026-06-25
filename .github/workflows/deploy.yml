@@ -46,6 +46,15 @@ jobs:
         with:
           path: artifacts/python-compiler/dist/public
 
+      - name: Convert markdown to HTML
+        run: |
+          pandoc roadmap.md -s -o index.html \
+            -c https://cdn.jsdelivr.net/npm/github-markdown-css@5.2.0/github-markdown.min.css \
+            --metadata title="AI Engineering Roadmap" \
+            --variable lang=en \
+            -H <(echo '<style>body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; } .markdown-body { font-size: 16px; line-height: 1.6; }</style>')
+  
+
   deploy:
     environment:
       name: github-pages
